@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Бортовой журнал</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Журнал">
+<meta name="theme-color" content="#101913">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#101913;
+    --paper:#E7DEC7;
+    --paper-dim:#DDD3B9;
+    --ink:#1E2A22;
+    --ink-soft:#4A5A4E;
+    --line:rgba(30,42,34,.18);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(ellipse at top left, #17241C 0%, var(--bg) 60%);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    padding:32px 16px 80px;
+  }
+  .sheet{
+    max-width:1000px;
+    margin:0 auto;
+    background:var(--paper);
+    border-radius:6px;
+    box-shadow:0 30px 60px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.2);
+    position:relative;
+    overflow:hidden;
+  }
+  .sheet::before{
+    content:"";
+    position:absolute; top:0; left:0; right:0; height:6px;
+    background:linear-gradient(90deg,#B8863B,#3E6259,#A65A4B,#C9A227,#4B5D77,#8C6E8A);
+  }
+  header{ padding:36px 40px 20px; border-bottom:1px solid var(--line); }
+  .eyebrow{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); }
+  h1{ font-family:'Fraunces',serif; font-weight:600; font-size:clamp(28px,4vw,40px); margin:6px 0 4px; letter-spacing:-.01em; }
+  .sub{ font-size:14px; color:var(--ink-soft); max-width:620px; line-height:1.5; }
+  .stats{ display:flex; flex-wrap:wrap; border-bottom:1px solid var(--line); }
+  .stat{ flex:1 1 120px; padding:16px 20px; border-right:1px solid var(--line); }
+  .stat:last-child{border-right:none;}
+  .stat .n{ font-family:'Fraunces',serif; font-size:24px; font-weight:600; }
+  .stat .l{ font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-soft); margin-top:2px; }
+
+  h2.panel-title{ font-family:'Fraunces',serif; font-size:15px; font-weight:600; margin:0 0 14px; display:flex; align-items:center; gap:8px; }
+  h2.panel-title::before{ content:""; width:8px; height:8px; border-radius:50%; background:#B8863B; }
+  h2.panel-title.alt::before{ background:#3E6259; }
+
+  .add-panel{ padding:24px 40px; background:var(--paper-dim); border-bottom:1px solid var(--line); }
+  .form-grid{ display:grid; grid-template-columns:2fr 1fr 1fr 1fr 1fr auto; gap:10px; align-items:end; }
+  @media(max-width:760px){ .form-grid{grid-template-columns:1fr 1fr;} }
+  .field label{ display:block; font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); margin-bottom:4px; }
+  input,select{ width:100%; font-family:'Inter',sans-serif; font-size:13px; padding:8px 9px; border:1px solid var(--line); border-radius:3px; background:#fff; color:var(--ink); }
+  input:focus,select:focus{outline:2px solid #3E6259; outline-offset:1px;}
+  .btn{ font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.06em; padding:9px 16px; border:1px solid var(--ink); border-radius:3px; background:var(--ink); color:var(--paper); cursor:pointer; white-space:nowrap; }
+  .btn:hover{background:#3E6259; border-color:#3E6259;}
+  .btn.ghost{ background:transparent; color:var(--ink); border-color:var(--line); }
+  .btn.ghost:hover{border-color:var(--ink); background:transparent;}
+  .btn.small{padding:6px 10px; font-size:10px;}
+  .hint{ font-size:11px; color:var(--ink-soft); margin-top:8px; }
+
+  /* MATCHER */
+  .matcher-panel{ padding:24px 40px; border-bottom:1px solid var(--line); }
+  .matcher-grid{ display:grid; grid-template-columns:2fr 1fr 1fr 1fr auto; gap:10px; align-items:end; }
+  @media(max-width:760px){ .matcher-grid{grid-template-columns:1fr 1fr;} }
+  .chip-group{ display:flex; flex-wrap:wrap; gap:6px; padding-top:2px; }
+  .chip{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:6px 10px; border-radius:20px; border:1.5px solid var(--line); background:#fff; cursor:pointer; color:var(--ink-soft); }
+  .chip.active{ color:#fff; border-color:transparent; }
+  .matcher-results{ margin-top:18px; }
+  .match-row{ display:grid; grid-template-columns:26px 2fr 1fr 1fr 1fr; gap:10px; align-items:center; padding:10px 12px; background:#fff; border:1px solid var(--line); border-radius:4px; margin-bottom:6px; }
+  @media(max-width:760px){ .match-row{grid-template-columns:22px 1fr; row-gap:4px;} .match-row .mr-extra{grid-column:2/3;} }
+  .match-rank{ font-family:'Fraunces',serif; font-weight:600; font-size:15px; color:var(--ink-soft); }
+  .match-name{font-size:13px;}
+  .match-why{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft); margin-top:2px; }
+  .match-meta{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); }
+
+  /* TABS */
+  .tabs-wrap{ padding:18px 40px 0; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
+  .tabs{ display:flex; gap:6px; overflow-x:auto; padding-bottom:14px; flex:1; scrollbar-width:thin; }
+  .tab{ font-family:'IBM Plex Mono',monospace; font-size:11px; white-space:nowrap; padding:7px 13px; border-radius:20px 20px 0 0; border:1px solid var(--line); border-bottom:none; background:var(--paper-dim); color:var(--ink-soft); cursor:pointer; display:flex; align-items:center; gap:6px; }
+  .tab .dot{width:7px;height:7px;border-radius:50%;}
+  .tab.active{ background:var(--paper); color:var(--ink); font-weight:600; border-color:var(--ink); position:relative; top:1px; }
+  .manage-btn{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--ink-soft); background:none; border:1px solid var(--line); border-radius:4px; padding:6px 10px; cursor:pointer; margin-bottom:14px; white-space:nowrap; }
+  .manage-btn:hover{color:var(--ink); border-color:var(--ink);}
+
+  /* CATEGORY MANAGER */
+  .cat-manager{ padding:20px 40px; background:var(--paper-dim); border-bottom:1px solid var(--line); }
+  .cat-row{ display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px dashed var(--line); }
+  .cat-row:last-of-type{border-bottom:none;}
+  .swatch{ width:20px; height:20px; border-radius:50%; border:2px solid rgba(0,0,0,.15); cursor:pointer; flex:none; }
+  .cat-row input[type=text]{flex:1; max-width:280px;}
+  .cat-count{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--ink-soft); min-width:70px; }
+  .add-cat-row{ display:flex; gap:10px; margin-top:14px; align-items:center; }
+  .add-cat-row input{max-width:280px;}
+
+  /* CONTROLS */
+  .controls{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:16px 40px; border-bottom:1px solid var(--line); }
+  .controls input[type=text]{min-width:180px;}
+  .spacer{flex:1;}
+  .toggle{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); display:flex; align-items:center; gap:6px; cursor:pointer; }
+
+  /* LIST */
+  .list{padding:14px 40px 40px;}
+  .row{ display:grid; grid-template-columns:34px 2.2fr 1fr 1fr 1fr 28px; gap:8px; align-items:center; padding:9px 4px; border-bottom:1px solid var(--line); }
+  .row.done{opacity:.45;}
+  .row.done .name{text-decoration:line-through;}
+  @media(max-width:760px){
+    .row{grid-template-columns:28px 1fr; grid-template-areas:"stamp name" "cat cat" "dur cost" "prio del"; row-gap:6px;}
+    .row .stamp{grid-area:stamp;} .row .namewrap{grid-area:name;}
+    .row select.catsel{grid-area:cat;} .row select.dursel{grid-area:dur;}
+    .row .costwrap{grid-area:cost;} .row .delbtn{grid-area:del; justify-self:end;}
+  }
+  .stamp{ width:26px; height:26px; border-radius:50%; border:1.5px dashed var(--ink-soft); cursor:pointer; }
+  .namewrap{min-width:0; cursor:pointer;}
+  .name{font-size:13.5px; line-height:1.35;}
+  .meta-date{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--ink-soft); }
+  .catsel,.dursel{font-size:11.5px; padding:6px 7px;}
+  .costwrap input{ font-family:'IBM Plex Mono',monospace; font-size:12px; padding:6px 7px; }
+  .delbtn{ background:none; border:none; cursor:pointer; color:var(--ink-soft); font-size:16px; line-height:1; width:26px;height:26px; }
+  .delbtn:hover{color:#8C3B3B;}
+  .empty{ padding:40px; text-align:center; color:var(--ink-soft); font-size:13px; }
+  footer{ padding:16px 40px 28px; display:flex; justify-content:space-between; align-items:center; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <header>
+    <div class="eyebrow">Личный реестр · путешествия / события / покупки / здоровье / цели</div>
+    <h1>Бортовой журнал</h1>
+    <div class="sub">Каждая категория — отдельная вкладка. Подбирай подходящее под текущие возможности через фильтр критериев, добавляй новые записи и настраивай сами категории под себя.</div>
+  </header>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="add-panel">
+    <h2 class="panel-title">Новая запись</h2>
+    <div class="form-grid">
+      <div class="field"><label>Название</label><input id="f-name" type="text" placeholder="например: Посетить Тбилиси"></div>
+      <div class="field"><label>Категория</label><select id="f-cat"></select></div>
+      <div class="field"><label>Длительность</label><select id="f-dur"></select></div>
+      <div class="field"><label>Стоимость, ₽</label><input id="f-cost" type="number" min="0" placeholder="—"></div>
+      <div class="field"><label>Приоритет</label><select id="f-prio"></select></div>
+      <button class="btn" id="f-add">Добавить</button>
+    </div>
+    <div class="hint">Категория подставляется по ключевым словам в названии — поправь при необходимости.</div>
+  </div>
+
+  <div class="matcher-panel">
+    <h2 class="panel-title alt">Подобрать активность под условия</h2>
+    <div class="matcher-grid">
+      <div class="field"><label>Тип (можно несколько)</label><div class="chip-group" id="m-cats"></div></div>
+      <div class="field"><label>Длительность, не более</label><select id="m-dur">
+        <option value="any">Не важно</option>
+        <option value="instant">Мгновенно</option>
+        <option value="short">До 1 дня</option>
+        <option value="medium">До нескольких дней</option>
+        <option value="long">До 1–2 недель</option>
+        <option value="multiyear">Долгосрочно</option>
+      </select></div>
+      <div class="field"><label>Бюджет от, ₽</label><input id="m-budget-min" type="number" min="0" placeholder="0"></div>
+      <div class="field"><label>Бюджет до, ₽</label><input id="m-budget-max" type="number" min="0" placeholder="без ограничений"></div>
+      <button class="btn" id="m-find">Подобрать</button>
+    </div>
+    <div class="hint">Если тип не выбран — ищем по всем категориям. Записи без указанной стоимости не исключаются, но помечаются отдельно.</div>
+    <div class="matcher-results" id="matcher-results"></div>
+  </div>
+
+  <div class="tabs-wrap">
+    <div class="tabs" id="tabs"></div>
+    <button class="manage-btn" id="toggleManage">⚙ Категории</button>
+  </div>
+
+  <div class="cat-manager" id="catManager" style="display:none;"></div>
+
+  <div class="controls">
+    <div class="field" style="min-width:150px;">
+      <label style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;color:var(--ink-soft);">Сортировка</label>
+      <select id="sortSel">
+        <option value="priority">По приоритету</option>
+        <option value="cost-desc">По стоимости ↓</option>
+        <option value="cost-asc">По стоимости ↑</option>
+        <option value="duration">По длительности</option>
+        <option value="name">По названию</option>
+      </select>
+    </div>
+    <input id="searchBox" type="text" placeholder="Поиск по названию…">
+    <div class="spacer"></div>
+    <label class="toggle"><input type="checkbox" id="showDone"> показать выполненные</label>
+    <button class="btn ghost" id="resetBtn">Сбросить к исходному списку</button>
+  </div>
+
+  <div class="list" id="list"></div>
+
+  <footer>
+    <span>Данные хранятся только в этом устройстве/аккаунте.</span>
+    <span id="savedFlag"></span>
+  </footer>
+</div>
+
+<script>
+const PALETTE = ['#B8863B','#3E6259','#A65A4B','#7C8D4C','#4B5D77','#8C6E8A','#C9A227','#6E8B74','#8C3B3B','#8A8272','#34506B','#6B4C6B'];
+const DURATIONS = [
+  {key:'instant', label:'Мгновенно', order:0},
+  {key:'short', label:'1 день', order:1},
+  {key:'medium', label:'Несколько дней', order:2},
+  {key:'long', label:'1–2+ недели', order:3},
+  {key:'multiyear', label:'Долгосрочно (годы)', order:4},
+  {key:'ongoing', label:'Регулярно', order:5},
+];
+const PRIORITIES = [
+  {key:'', label:'Не задан', order:3, color:'#8A8272'},
+  {key:'high', label:'Высокий', order:0, color:'#8C3B3B'},
+  {key:'medium', label:'Средний', order:1, color:'#B8863B'},
+  {key:'low', label:'Низкий', order:2, color:'#6E8B74'},
+];
+const DEFAULT_CATEGORIES = [
+  {key:'concerts', label:'Концерты и фестивали', color:'#B8863B'},
+  {key:'travel', label:'Путешествия', color:'#3E6259'},
+  {key:'purchases', label:'Покупки', color:'#A65A4B'},
+  {key:'sport', label:'Спорт и тренировки', color:'#7C8D4C'},
+  {key:'health', label:'Здоровье и медицина', color:'#4B5D77'},
+  {key:'beauty', label:'Красота и уход', color:'#8C6E8A'},
+  {key:'career', label:'Образование и карьера', color:'#C9A227'},
+  {key:'growth', label:'Личное развитие', color:'#6E8B74'},
+  {key:'goals', label:'Крупные цели', color:'#8C3B3B'},
+  {key:'misc', label:'Разное', color:'#8A8272'},
+];
+
+const DEFAULT_ITEMS = [
+ {name:'Концерт балета Моисеева', category:'concerts', duration:'short', cost:null, priority:'', date:''},
+ {name:'Концерт Dua Lipa', category:'concerts', duration:'short', cost:null, priority:'', date:''},
+ {name:'Фестиваль OUTLOUD, Прага (Би-2, Порнофильмы, Манёчка, Neru, Noize MC)', category:'concerts', duration:'medium', cost:null, priority:'', date:'август 2027'},
+ {name:'Купить лыжероллеры', category:'purchases', duration:'instant', cost:25000, priority:'', date:'сентябрь 2026'},
+ {name:'Теннисный кэмп', category:'sport', duration:'medium', cost:null, priority:'', date:'лето 2027'},
+ {name:'Мурманск', category:'travel', duration:'medium', cost:null, priority:'', date:'май–июнь 2027'},
+ {name:'Стать донором костного мозга', category:'health', duration:'short', cost:null, priority:'', date:''},
+ {name:'Фестиваль Laima, Юрмала', category:'concerts', duration:'medium', cost:null, priority:'', date:'июль 2027'},
+ {name:'Концерт Imagine Dragons (или другой крупной звезды)', category:'concerts', duration:'short', cost:null, priority:'', date:''},
+ {name:'Посетить Японию, Южную Корею, Шанхай', category:'travel', duration:'long', cost:null, priority:'', date:''},
+ {name:'Посетить Северную Америку (США, Канада)', category:'travel', duration:'long', cost:null, priority:'', date:''},
+ {name:'Посетить Южную Америку (Чили, Аргентина и др.)', category:'travel', duration:'long', cost:null, priority:'', date:''},
+ {name:'Выучить румынский язык', category:'career', duration:'multiyear', cost:null, priority:'', date:'2026–2027'},
+ {name:'Поступить в докторантуру в США', category:'career', duration:'long', cost:null, priority:'', date:'лето 2027'},
+ {name:'Сменить работу на год', category:'career', duration:'long', cost:null, priority:'', date:''},
+ {name:'Плёс и канатный городок рядом', category:'travel', duration:'short', cost:null, priority:'', date:'август–сентябрь 2026'},
+ {name:'Рыбинск', category:'travel', duration:'short', cost:null, priority:'', date:'август 2026'},
+ {name:'Посетить Португалию', category:'travel', duration:'long', cost:null, priority:'', date:''},
+ {name:'Посетить Австралию', category:'travel', duration:'long', cost:null, priority:'', date:''},
+ {name:'Посетить Марокко', category:'travel', duration:'medium', cost:null, priority:'', date:''},
+ {name:'Крит (с Андреной) и Кипр (с Максом и Соней)', category:'travel', duration:'medium', cost:null, priority:'', date:''},
+ {name:'Упражнения для тенниса у стены', category:'sport', duration:'ongoing', cost:null, priority:'', date:'1–2 раза в неделю'},
+ {name:'Конференция Иштвана Урбана, Венгрия', category:'career', duration:'medium', cost:null, priority:'', date:'октябрь 2027'},
+ {name:'Купить Apple Watch 11', category:'purchases', duration:'instant', cost:40000, priority:'', date:''},
+ {name:'Купить книги с фото (WB)', category:'purchases', duration:'instant', cost:5000, priority:'', date:''},
+ {name:'Купить теннисные кроссовки', category:'purchases', duration:'instant', cost:5000, priority:'', date:''},
+ {name:'Манжерок, отель 5★', category:'travel', duration:'short', cost:null, priority:'', date:''},
+ {name:'Концерт «Вирский Данс Компани»', category:'concerts', duration:'short', cost:null, priority:'', date:''},
+ {name:'Концерт ансамбля «Толока»', category:'concerts', duration:'short', cost:null, priority:'', date:''},
+ {name:'Концерт Макса Коржа', category:'concerts', duration:'short', cost:null, priority:'', date:''},
+ {name:'Концерт молдавского танцевального ансамбля', category:'concerts', duration:'short', cost:null, priority:'', date:''},
+ {name:'Операция уздечки', category:'health', duration:'short', cost:null, priority:'', date:''},
+ {name:'Коррекция бровей', category:'beauty', duration:'instant', cost:null, priority:'', date:''},
+ {name:'Механическая чистка лица, сужение пор', category:'beauty', duration:'instant', cost:null, priority:'', date:''},
+ {name:'Колоноскопия и ФГДС', category:'health', duration:'short', cost:null, priority:'', date:''},
+ {name:'Операция шишки на копчике', category:'health', duration:'medium', cost:null, priority:'', date:''},
+ {name:'Прыжок в длину выше норматива МС (>7.60м)', category:'goals', duration:'long', cost:null, priority:'', date:'зима 2026'},
+ {name:'Купить отпариватель', category:'purchases', duration:'instant', cost:null, priority:'', date:''},
+ {name:'Фестиваль Tomorrowland', category:'concerts', duration:'medium', cost:null, priority:'', date:''},
+ {name:'Набрать 1000 подписчиков в Instagram', category:'misc', duration:'ongoing', cost:null, priority:'', date:''},
+ {name:'Посетить Байкал', category:'travel', duration:'medium', cost:null, priority:'', date:''},
+ {name:'Посетить Дальний Восток', category:'travel', duration:'medium', cost:null, priority:'', date:''},
+ {name:'Абу-Даби + финал Формулы-1', category:'travel', duration:'medium', cost:null, priority:'', date:'декабрь 2027'},
+ {name:'Купить новую теннисную ракетку', category:'purchases', duration:'instant', cost:null, priority:'', date:''},
+ {name:'Картинг', category:'misc', duration:'short', cost:null, priority:'', date:'', done:true},
+ {name:'Посетить Венецию', category:'travel', duration:'short', cost:null, priority:'', date:''},
+ {name:'Стилист + разбор гардероба, докупить всё', category:'beauty', duration:'short', cost:null, priority:'', date:''},
+ {name:'Стать олимпийским чемпионом', category:'goals', duration:'multiyear', cost:null, priority:'', date:'лето 2028'},
+ {name:'Войти в топ-1000 ATP', category:'goals', duration:'multiyear', cost:null, priority:'', date:'через пару лет'},
+ {name:'Съездить на дачу к Саше', category:'misc', duration:'short', cost:null, priority:'', date:''},
+ {name:'Прочитать «Думай медленно… решай быстро»', category:'growth', duration:'short', cost:null, priority:'', date:''},
+ {name:'Прочитать «Ученица»', category:'growth', duration:'short', cost:null, priority:'', date:''},
+ {name:'Стрижки: разные причёски за визит + фотосессия', category:'beauty', duration:'short', cost:null, priority:'', date:''},
+ {name:'Юрьевец, Ивановская область', category:'travel', duration:'short', cost:null, priority:'', date:'осень 2026'},
+ {name:'Посетить Архангельскую область', category:'travel', duration:'medium', cost:null, priority:'', date:''},
+].map((it,i)=>({id:'seed-'+i, done:false, ...it}));
+
+const KEYWORD_RULES = [
+  [/концерт|фестивал|tomorrowland|дэнс|данс/i,'concerts'],
+  [/купить|приобрести|заказать/i,'purchases'],
+  [/операц|колоноскоп|фгдс|донор/i,'health'],
+  [/бров|чистк.*лиц|космет|стилист|стрижк|гардероб/i,'beauty'],
+  [/выучить|докторантур|конференц|сменить работу/i,'career'],
+  [/прочитать|книг/i,'growth'],
+  [/чемпион|атп|мс\b|олимпийск/i,'goals'],
+  [/посетить|поездк|съездить|путешеств/i,'travel'],
+];
+function guessCategory(name, categories){
+  for(const [re,cat] of KEYWORD_RULES){
+    if(re.test(name) && categories.some(c=>c.key===cat)) return cat;
+  }
+  return categories.some(c=>c.key==='misc') ? 'misc' : categories[0].key;
+}
+
+let items = [];
+let categories = [];
+let activeTab = 'all';
+let catTouched = false;
+
+function catInfo(k){ return categories.find(c=>c.key===k) || categories[categories.length-1]; }
+function durInfo(k){ return DURATIONS.find(d=>d.key===k) || DURATIONS[0]; }
+function prioInfo(k){ return PRIORITIES.find(p=>p.key===(k||'')) || PRIORITIES[0]; }
+function costLabel(c){ return (c===null||c===undefined||c==='') ? '—' : Number(c).toLocaleString('ru-RU')+' ₽'; }
+
+async function loadAll(){
+  try{
+    const raw = localStorage.getItem('bucket-items');
+    items = raw ? JSON.parse(raw) : DEFAULT_ITEMS;
+  }catch(e){ items = DEFAULT_ITEMS; }
+  try{
+    const raw = localStorage.getItem('bucket-categories');
+    categories = raw ? JSON.parse(raw) : DEFAULT_CATEGORIES;
+  }catch(e){ categories = DEFAULT_CATEGORIES; }
+  await saveAll();
+}
+async function saveAll(){
+  try{
+    localStorage.setItem('bucket-items', JSON.stringify(items));
+    localStorage.setItem('bucket-categories', JSON.stringify(categories));
+    flashSaved();
+  }catch(e){ console.error('storage error', e); }
+}
+let flashTimer;
+function flashSaved(){
+  const el = document.getElementById('savedFlag');
+  el.textContent = 'сохранено ✓';
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(()=>{el.textContent='';}, 1200);
+}
+
+function fillSelect(sel, list, valKey, labelKey){
+  sel.innerHTML='';
+  list.forEach(it=>{
+    const o=document.createElement('option');
+    o.value=it[valKey]; o.textContent=it[labelKey];
+    sel.appendChild(o);
+  });
+}
+
+function computeStats(){
+  const total = items.filter(i=>!i.done).length;
+  const doneCount = items.filter(i=>i.done).length;
+  const totalCost = items.filter(i=>!i.done && i.cost).reduce((s,i)=>s+Number(i.cost),0);
+  const highPrio = items.filter(i=>!i.done && i.priority==='high').length;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="n">${total}</div><div class="l">в списке</div></div>
+    <div class="stat"><div class="n">${doneCount}</div><div class="l">выполнено</div></div>
+    <div class="stat"><div class="n">${highPrio}</div><div class="l">высокий приоритет</div></div>
+    <div class="stat"><div class="n">${totalCost.toLocaleString('ru-RU')} ₽</div><div class="l">известная сумма трат</div></div>
+  `;
+}
+
+/* ---------- TABS ---------- */
+function renderTabs(){
+  const wrap = document.getElementById('tabs');
+  wrap.innerHTML='';
+  const allTab = document.createElement('div');
+  allTab.className='tab'+(activeTab==='all'?' active':'');
+  allTab.innerHTML = `<span>Все</span>`;
+  allTab.addEventListener('click', ()=>{ activeTab='all'; renderTabs(); renderList(); });
+  wrap.appendChild(allTab);
+
+  categories.forEach(c=>{
+    const count = items.filter(i=>i.category===c.key && !i.done).length;
+    const tab = document.createElement('div');
+    tab.className='tab'+(activeTab===c.key?' active':'');
+    tab.innerHTML = `<span class="dot" style="background:${c.color}"></span><span>${c.label}</span><span style="color:${c.color};font-weight:600;">${count}</span>`;
+    tab.addEventListener('click', ()=>{ activeTab=c.key; renderTabs(); renderList(); });
+    wrap.appendChild(tab);
+  });
+}
+
+/* ---------- CATEGORY MANAGER ---------- */
+function renderCatManager(){
+  const el = document.getElementById('catManager');
+  el.innerHTML = '<h2 class="panel-title alt">Категории</h2>';
+  categories.forEach(c=>{
+    const row = document.createElement('div');
+    row.className='cat-row';
+    const count = items.filter(i=>i.category===c.key).length;
+    row.innerHTML = `
+      <div class="swatch" style="background:${c.color}" data-key="${c.key}"></div>
+      <input type="text" value="${c.label}" data-key="${c.key}">
+      <span class="cat-count">${count} запис.</span>
+      <button class="btn small ghost" data-del="${c.key}">Удалить</button>
+    `;
+    el.appendChild(row);
+  });
+  const addRow = document.createElement('div');
+  addRow.className='add-cat-row';
+  addRow.innerHTML = `<input type="text" id="newCatName" placeholder="Название новой категории"><button class="btn small" id="addCatBtn">Добавить категорию</button>`;
+  el.appendChild(addRow);
+
+  el.querySelectorAll('.swatch').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      const c = catInfo(sw.dataset.key);
+      const idx = PALETTE.indexOf(c.color);
+      c.color = PALETTE[(idx+1)%PALETTE.length];
+      saveAll(); renderCatManager(); renderTabs(); renderList();
+    });
+  });
+  el.querySelectorAll('.cat-row input[type=text]').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      const c = catInfo(inp.dataset.key);
+      c.label = inp.value.trim() || c.label;
+      saveAll(); renderCatManager(); renderTabs(); renderList(); renderMatcherChips();
+    });
+  });
+  el.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(categories.length<=1){ alert('Должна остаться хотя бы одна категория.'); return; }
+      const key = btn.dataset.del;
+      const affected = items.filter(i=>i.category===key).length;
+      if(affected>0 && !confirm(`В категории «${catInfo(key).label}» ${affected} записей. Они будут перенесены в первую оставшуюся категорию. Продолжить?`)) return;
+      categories = categories.filter(c=>c.key!==key);
+      const fallback = categories[0].key;
+      items.forEach(i=>{ if(i.category===key) i.category=fallback; });
+      if(activeTab===key) activeTab='all';
+      saveAll(); renderCatManager(); renderTabs(); renderList(); computeStats(); renderMatcherChips(); refreshFormSelects();
+    });
+  });
+  document.getElementById('addCatBtn').addEventListener('click', ()=>{
+    const nameInput = document.getElementById('newCatName');
+    const name = nameInput.value.trim();
+    if(!name) return;
+    const usedColors = categories.map(c=>c.color);
+    const nextColor = PALETTE.find(p=>!usedColors.includes(p)) || PALETTE[categories.length % PALETTE.length];
+    categories.push({key:'c'+Date.now(), label:name, color:nextColor});
+    saveAll(); renderCatManager(); renderTabs(); renderMatcherChips(); refreshFormSelects();
+    nameInput.value='';
+  });
+}
+
+/* ---------- MATCHER ---------- */
+function renderMatcherChips(){
+  const wrap = document.getElementById('m-cats');
+  const prevActive = Array.from(wrap.querySelectorAll('.chip.active')).map(c=>c.dataset.key);
+  wrap.innerHTML='';
+  categories.forEach(c=>{
+    const chip = document.createElement('div');
+    chip.className='chip'+(prevActive.includes(c.key)?' active':'');
+    chip.dataset.key=c.key;
+    chip.textContent=c.label;
+    if(prevActive.includes(c.key)){ chip.style.background=c.color; }
+    chip.addEventListener('click', ()=>{
+      chip.classList.toggle('active');
+      chip.style.background = chip.classList.contains('active') ? c.color : '';
+    });
+    wrap.appendChild(chip);
+  });
+}
+
+function runMatcher(){
+  const selectedCats = Array.from(document.querySelectorAll('#m-cats .chip.active')).map(c=>c.dataset.key);
+  const durMax = document.getElementById('m-dur').value;
+  const durThreshold = durMax==='any' ? 99 : durInfo(durMax).order;
+  const budgetMin = document.getElementById('m-budget-min').value ? Number(document.getElementById('m-budget-min').value) : null;
+  const budgetMax = document.getElementById('m-budget-max').value ? Number(document.getElementById('m-budget-max').value) : null;
+
+  let candidates = items.filter(i=>{
+    if(i.done) return false;
+    if(selectedCats.length && !selectedCats.includes(i.category)) return false;
+    if(durMax!=='any' && durInfo(i.duration).order > durThreshold) return false;
+    if(budgetMax!==null && i.cost!==null && i.cost>budgetMax) return false;
+    if(budgetMin!==null && i.cost!==null && i.cost<budgetMin) return false;
+    return true;
+  });
+
+  candidates.sort((a,b)=>{
+    return prioInfo(a.priority).order - prioInfo(b.priority).order
+      || (a.cost===null?1:0) - (b.cost===null?1:0)
+      || (a.cost||0) - (b.cost||0)
+      || durInfo(a.duration).order - durInfo(b.duration).order
+      || a.name.localeCompare(b.name,'ru');
+  });
+
+  const resEl = document.getElementById('matcher-results');
+  resEl.innerHTML='';
+  if(candidates.length===0){
+    resEl.innerHTML = '<div class="empty">Под эти условия ничего не подошло — попробуй ослабить бюджет, длительность или тип.</div>';
+    return;
+  }
+  candidates.slice(0,8).forEach((it,idx)=>{
+    const c = catInfo(it.category), p = prioInfo(it.priority), d = durInfo(it.duration);
+    const why = [];
+    if(p.key) why.push('приоритет: '+p.label.toLowerCase());
+    why.push(it.cost!==null ? 'бюджет подходит' : 'сумма не указана');
+    why.push(d.label.toLowerCase());
+    const row = document.createElement('div');
+    row.className='match-row';
+    row.innerHTML = `
+      <div class="match-rank">${idx+1}</div>
+      <div>
+        <div class="match-name">${it.name}</div>
+        <div class="match-why">${why.join(' · ')}</div>
+      </div>
+      <div class="match-meta mr-extra" style="color:${c.color}">${c.label}</div>
+      <div class="match-meta mr-extra">${d.label}</div>
+      <div class="match-meta mr-extra">${costLabel(it.cost)}</div>
+    `;
+    resEl.appendChild(row);
+  });
+}
+
+/* ---------- LIST ---------- */
+function currentFilters(){
+  return {
+    sort: document.getElementById('sortSel').value,
+    search: document.getElementById('searchBox').value.trim().toLowerCase(),
+    showDone: document.getElementById('showDone').checked,
+  };
+}
+
+function renderList(){
+  const {sort, search, showDone} = currentFilters();
+  let data = items.filter(i=>{
+    if(!showDone && i.done) return false;
+    if(activeTab!=='all' && i.category!==activeTab) return false;
+    if(search && !i.name.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  const listEl = document.getElementById('list');
+  listEl.innerHTML='';
+  if(data.length===0){
+    listEl.innerHTML = '<div class="empty">Ничего не найдено — измени фильтр или добавь новую запись выше.</div>';
+    return;
+  }
+
+  data.sort((a,b)=>{
+    if(sort==='priority') return prioInfo(a.priority).order - prioInfo(b.priority).order || a.name.localeCompare(b.name,'ru');
+    if(sort==='cost-desc') return (b.cost===null?-1:b.cost) - (a.cost===null?-1:a.cost);
+    if(sort==='cost-asc') return (a.cost===null?Infinity:a.cost) - (b.cost===null?Infinity:b.cost);
+    if(sort==='duration') return durInfo(a.duration).order - durInfo(b.duration).order || a.name.localeCompare(b.name,'ru');
+    return a.name.localeCompare(b.name,'ru');
+  });
+
+  data.forEach(it=>listEl.appendChild(renderRow(it)));
+}
+
+function renderRow(it){
+  const row = document.createElement('div');
+  row.className = 'row'+(it.done?' done':'');
+  const p = prioInfo(it.priority);
+
+  const stamp = document.createElement('div');
+  stamp.className='stamp';
+  stamp.title = 'Приоритет: '+p.label+' (клик — изменить)';
+  stamp.style.borderColor = p.color;
+  stamp.style.background = it.priority ? p.color : 'transparent';
+  stamp.addEventListener('click', ()=>{
+    const order = ['','high','medium','low'];
+    const idx = order.indexOf(it.priority||'');
+    it.priority = order[(idx+1)%order.length];
+    saveAll(); renderList(); computeStats();
+  });
+
+  const nameWrap = document.createElement('div');
+  nameWrap.className='namewrap';
+  const catBadge = activeTab==='all' ? `<span style="color:${catInfo(it.category).color};font-family:'IBM Plex Mono',monospace;font-size:10px;">${catInfo(it.category).label} · </span>` : '';
+  nameWrap.innerHTML = `<div class="name">${it.name}</div><div class="meta-date">${catBadge}${it.date||''}</div>`;
+  nameWrap.title='Клик — отметить выполненным';
+  nameWrap.addEventListener('click', ()=>{ it.done=!it.done; saveAll(); renderList(); computeStats(); renderTabs(); });
+
+  const catSel = document.createElement('select');
+  catSel.className='catsel';
+  fillSelect(catSel, categories, 'key','label');
+  catSel.value = it.category;
+  catSel.addEventListener('change', ()=>{ it.category=catSel.value; saveAll(); renderList(); renderTabs(); });
+
+  const durSel = document.createElement('select');
+  durSel.className='dursel';
+  fillSelect(durSel, DURATIONS, 'key','label');
+  durSel.value = it.duration;
+  durSel.addEventListener('change', ()=>{ it.duration=durSel.value; saveAll(); });
+
+  const costWrap = document.createElement('div');
+  costWrap.className='costwrap';
+  const costInput = document.createElement('input');
+  costInput.type='number'; costInput.min='0'; costInput.placeholder='—';
+  costInput.value = it.cost===null||it.cost===undefined ? '' : it.cost;
+  costInput.addEventListener('change', ()=>{ it.cost = costInput.value===''? null : Number(costInput.value); saveAll(); computeStats(); });
+  costWrap.appendChild(costInput);
+
+  const delBtn = document.createElement('button');
+  delBtn.className='delbtn'; delBtn.textContent='✕'; delBtn.title='Удалить';
+  delBtn.addEventListener('click', ()=>{
+    items = items.filter(x=>x.id!==it.id);
+    saveAll(); renderList(); computeStats(); renderTabs();
+  });
+
+  row.appendChild(stamp); row.appendChild(nameWrap); row.appendChild(catSel);
+  row.appendChild(durSel); row.appendChild(costWrap); row.appendChild(delBtn);
+  return row;
+}
+
+/* ---------- FORM ---------- */
+function refreshFormSelects(){
+  fillSelect(document.getElementById('f-cat'), categories, 'key','label');
+}
+
+function initForm(){
+  refreshFormSelects();
+  fillSelect(document.getElementById('f-dur'), DURATIONS, 'key','label');
+  fillSelect(document.getElementById('f-prio'), PRIORITIES, 'key','label');
+
+  document.getElementById('f-name').addEventListener('input', (e)=>{
+    if(catTouched) return;
+    document.getElementById('f-cat').value = guessCategory(e.target.value, categories);
+  });
+  document.getElementById('f-cat').addEventListener('change', ()=>{ catTouched=true; });
+
+  document.getElementById('f-add').addEventListener('click', async ()=>{
+    const name = document.getElementById('f-name').value.trim();
+    if(!name) return;
+    const newItem = {
+      id:'i'+Date.now(), name,
+      category: document.getElementById('f-cat').value,
+      duration: document.getElementById('f-dur').value,
+      cost: document.getElementById('f-cost').value ? Number(document.getElementById('f-cost').value) : null,
+      priority: document.getElementById('f-prio').value,
+      date:'', done:false,
+    };
+    items.unshift(newItem);
+    await saveAll();
+    document.getElementById('f-name').value='';
+    document.getElementById('f-cost').value='';
+    document.getElementById('f-cat').value = guessCategory('', categories);
+    catTouched=false;
+    renderList(); computeStats(); renderTabs();
+  });
+
+  document.getElementById('m-find').addEventListener('click', runMatcher);
+
+  ['sortSel','searchBox','showDone'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', renderList);
+    document.getElementById(id).addEventListener('change', renderList);
+  });
+
+  document.getElementById('toggleManage').addEventListener('click', ()=>{
+    const el = document.getElementById('catManager');
+    el.style.display = el.style.display==='none' ? 'block' : 'none';
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', async ()=>{
+    if(!confirm('Сбросить список и категории к исходному набору? Все твои изменения будут потеряны.')) return;
+    items = DEFAULT_ITEMS.map(it=>({...it, id: it.id+'-'+Date.now()}));
+    categories = DEFAULT_CATEGORIES.map(c=>({...c}));
+    activeTab='all';
+    await saveAll();
+    renderTabs(); renderCatManager(); renderMatcherChips(); refreshFormSelects(); renderList(); computeStats();
+  });
+}
+
+(async function init(){
+  document.getElementById('list').innerHTML = '<div class="empty">Загрузка…</div>';
+  initForm();
+  await loadAll();
+  renderTabs();
+  renderCatManager();
+  renderMatcherChips();
+  refreshFormSelects();
+  renderList();
+  computeStats();
+})();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(e=>console.error('sw failed', e));
+  });
+}
+</script>
+</body>
+</html>
